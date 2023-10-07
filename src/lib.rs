@@ -1,35 +1,28 @@
 use q_compress::{Compressor, CompressorConfig};
 
-pub fn split(input: &[u8]) -> (Vec<u32>, Vec<u32>) {
-    let mut headers = vec![];
-    let mut indices = vec![];
+pub fn u48tou64(bytes: &[u8]) -> Vec<u64> {
+    let mut data = vec![];
 
-    let mut header = true;
-    for chunk in input.chunks_exact(3) {
-        if header {
-            headers.push(u32::from_le_bytes([chunk[2], chunk[1], chunk[0], 0x00]));
-            header = false;
-        } else {
-            indices.push(u32::from_le_bytes([chunk[2], chunk[1], chunk[0], 0x00]));
-            header = true;
-        }
+    for chunk in bytes.chunks_exact(6) {
+        data.push(u64::from_le_bytes([
+            chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0], 0x00, 0x00,
+        ]));
     }
 
-    (headers, indices)
+    data
 }
 
-pub fn join(headers: &[u32], indices: &[u32]) -> Vec<u8> {
+pub fn u64tou48(data: &[u64]) -> Vec<u8> {
     let mut bytes = vec![];
 
-    for (i, header) in headers.iter().enumerate() {
-        let header_bytes = header.to_le_bytes();
-        bytes.push(header_bytes[2]);
-        bytes.push(header_bytes[1]);
-        bytes.push(header_bytes[0]);
-        let index_bytes = indices[i].to_le_bytes();
-        bytes.push(index_bytes[2]);
-        bytes.push(index_bytes[1]);
-        bytes.push(index_bytes[0]);
+    for chunk in data.iter() {
+        let chunk_bytes = chunk.to_le_bytes();
+        bytes.push(chunk_bytes[0]);
+        bytes.push(chunk_bytes[1]);
+        bytes.push(chunk_bytes[2]);
+        bytes.push(chunk_bytes[3]);
+        bytes.push(chunk_bytes[4]);
+        bytes.push(chunk_bytes[5]);
     }
 
     bytes
@@ -51,7 +44,7 @@ mod tests {
     use std::fs;
 
     use anyhow::Result;
-    use q_compress::auto_decompress;
+    use q_compress::{auto_compress, auto_decompress};
 
     use super::*;
 
@@ -60,22 +53,18 @@ mod tests {
         let file = fs::read("sealList.bin")?;
         println!("orig bytes: {}", file.len());
 
-        let (headers, indices) = split(&file);
+        let data = u48tou64(&file);
 
-        let compressed_headers = compress(&headers);
-        let compressed_indices = compress(&indices);
+        let compressed = auto_compress(&data, 8);
 
-        println!("compressed headers: {}", compressed_headers.len());
-        println!("compressed indices: {}", compressed_indices.len());
-        println!(
-            "total: {}",
-            compressed_headers.len() + compressed_indices.len()
-        );
+        println!("compressed headers: {}", compressed.len());
+        // println!("compressed indices: {}", compressed_indices.len());
+        println!("total: {}", compressed.len());
 
-        let decompressed_headers = auto_decompress::<u32>(&compressed_headers)?;
-        let decompressed_indices = auto_decompress::<u32>(&compressed_indices)?;
+        let decompressed = auto_decompress::<u64>(&compressed)?;
+        // let decompressed_indices = auto_decompress::<u32>(&compressed_indices)?;
 
-        let bytes = join(&decompressed_headers, &decompressed_indices);
+        let bytes = u64tou48(&decompressed);
 
         assert_eq!(file[0..10], bytes[0..10]);
         assert_eq!(file.len(), bytes.len());
