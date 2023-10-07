@@ -15,9 +15,6 @@ pub fn split(input: &[u8]) -> (Vec<u32>, Vec<u32>) {
         }
     }
 
-    headers.sort();
-    indices.sort();
-
     (headers, indices)
 }
 
