@@ -15,6 +15,9 @@ pub fn split(input: &[u8]) -> (Vec<u32>, Vec<u32>) {
         }
     }
 
+    headers.sort();
+    indices.sort();
+
     (headers, indices)
 }
 
@@ -22,20 +25,19 @@ pub fn compress(data: &[u32]) -> (Vec<u8>, Vec<u8>) {
     let bitpacker = BitPacker8x::new();
     let mut initial_value = 0u32;
     let mut result = vec![];
+    let mut compressed = vec![0u8; 4 * BitPacker8x::BLOCK_LEN];
     let mut compressed_lens = vec![];
     let mut lengths: Vec<u8> = vec![];
 
     for chunk in data.chunks_exact(BitPacker8x::BLOCK_LEN) {
-        let mut compressed = vec![0u8; 4 * BitPacker8x::BLOCK_LEN];
-
         let num_bits: u8 = bitpacker.num_bits(chunk);
 
-        println!("num bits: {num_bits}");
+        // println!("num bits: {num_bits}");
 
         let compressed_len =
             bitpacker.compress_sorted(initial_value, chunk, &mut compressed[..], num_bits);
 
-        println!("compressed len: {compressed_len}");
+        // println!("compressed len: {compressed_len}");
 
         result.extend_from_slice(&compressed[..compressed_len]);
 
@@ -47,16 +49,14 @@ pub fn compress(data: &[u32]) -> (Vec<u8>, Vec<u8>) {
     let mut initial_value = 0u32;
 
     for chunk in compressed_lens.chunks_exact(BitPacker8x::BLOCK_LEN) {
-        let mut compressed = vec![0u8; 4 * BitPacker8x::BLOCK_LEN];
-
         let num_bits: u8 = bitpacker.num_bits(chunk);
 
-        println!("num bits: {num_bits}");
+        // println!("num bits: {num_bits}");
 
         let compressed_len =
             bitpacker.compress_sorted(initial_value, chunk, &mut compressed[..], num_bits);
 
-        println!("compressed len: {compressed_len}");
+        // println!("compressed len: {compressed_len}");
 
         lengths.extend_from_slice(&compressed[..compressed_len]);
 
@@ -78,7 +78,7 @@ mod tests {
     #[test]
     fn bitpacker() -> Result<()> {
         let file = fs::read("sealList.bin")?;
-        println!("orig bytes: {}", file.len() * 4);
+        println!("orig bytes: {}", file.len());
 
         let (headers, indices) = split(&file);
 
