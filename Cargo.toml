@@ -9,4 +9,4 @@ license = "MIT"
 
 [dependencies]
 anyhow = "1.0"
-q_compress = "0.11.7"
+pco = "0.1.1"

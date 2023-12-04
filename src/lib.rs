@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
-use q_compress::{Compressor, CompressorConfig};
+use anyhow::Result;
+use pco::{standalone::simple_compress, ChunkConfig};
 
 pub fn decode(input: &[u8]) -> BTreeMap<u32, Vec<u32>> {
     let mut headers: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
@@ -22,21 +23,19 @@ pub fn decode(input: &[u8]) -> BTreeMap<u32, Vec<u32>> {
     headers
 }
 
-pub fn compress(chain: &BTreeMap<u32, Vec<u32>>) -> Vec<u8> {
+pub fn compress(chain: &BTreeMap<u32, Vec<u32>>) -> Result<Vec<u8>> {
     let mut bytes = vec![];
     let mut lens: Vec<u32> = vec![];
 
     let mut headers = chain.keys().map(|k| k.to_owned()).collect::<Vec<u32>>();
     headers.sort();
 
-    let mut compressor = Compressor::<u32>::from_config(
-        CompressorConfig::default()
+    let compressed_headers = simple_compress(
+        headers.as_slice(),
+        &ChunkConfig::default()
             .with_compression_level(12)
-            .with_delta_encoding_order(1)
-            .with_use_gcds(true),
-    );
-
-    let compressed_headers = compressor.simple_compress(headers.as_slice());
+            .with_delta_encoding_order(Some(1)),
+    )?;
 
     bytes.extend(compressed_headers.len().to_le_bytes());
     bytes.extend(compressed_headers);
@@ -50,31 +49,27 @@ pub fn compress(chain: &BTreeMap<u32, Vec<u32>>) -> Vec<u8> {
         indices.extend(vals);
     }
 
-    let mut compressor = Compressor::<u32>::from_config(
-        CompressorConfig::default()
+    let compressed_indices = simple_compress(
+        &indices,
+        &ChunkConfig::default()
             .with_compression_level(12)
-            .with_delta_encoding_order(1)
-            .with_use_gcds(true),
-    );
-
-    let compressed_indices = compressor.simple_compress(&indices);
+            .with_delta_encoding_order(Some(1)),
+    )?;
 
     bytes.extend(compressed_indices.len().to_le_bytes());
     bytes.extend(compressed_indices);
 
-    let mut compressor = Compressor::<u32>::from_config(
-        CompressorConfig::default()
+    let compressed_lens = simple_compress(
+        &lens,
+        &ChunkConfig::default()
             .with_compression_level(12)
-            .with_delta_encoding_order(0)
-            .with_use_gcds(true),
-    );
-
-    let compressed_lens = compressor.simple_compress(&lens);
+            .with_delta_encoding_order(Some(0)),
+    )?;
 
     bytes.extend(compressed_lens.len().to_le_bytes());
     bytes.extend(compressed_lens);
 
-    bytes
+    Ok(bytes)
 }
 
 pub fn join(headers: &[u32], indices: &[u32]) -> Vec<u8> {
@@ -108,7 +103,7 @@ mod tests {
         println!("orig bytes: {}", file.len());
 
         let chain = decode(&file);
-        let compressed = compress(&chain);
+        let compressed = compress(&chain).unwrap();
 
         println!("compressed: {}", compressed.len());
 
